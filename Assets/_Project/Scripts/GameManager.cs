@@ -26,6 +26,7 @@ public class GameManager : MonoBehaviour
     {
         uiManager.OnBgmToggleAction += (value) => ToggleMuteGameMusic(!value);
         uiManager.Init();
+        PowerUpManager.Instance.Init();
         
         yield return null;
         

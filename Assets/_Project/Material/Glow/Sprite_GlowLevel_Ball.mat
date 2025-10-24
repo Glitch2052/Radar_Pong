@@ -43,3 +43,4 @@ Material:
     - _TintRGBA_Color_1: {r: 0.43137255, g: 0.81960785, b: 0.56078434, a: 1}
     - _TintRGBA_Color_2: {r: 0.2688679, g: 1, b: 0.5125787, a: 1}
   m_BuildTextureStacks: []
+  m_AllowLocking: 1

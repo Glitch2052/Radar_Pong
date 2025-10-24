@@ -4,6 +4,8 @@ using UnityEngine;
 public class Paddle : MonoBehaviour
 {
     public PaddleType paddleType;
+    public ProceduralPaddleGen paddleMesh;
+    public Transform meshTransform;
     [SerializeField] private SpriteRenderer spriteRenderer;
     private static readonly int AlphaIntensityFade2 = Shader.PropertyToID("_AlphaIntensity_Fade_2");
 

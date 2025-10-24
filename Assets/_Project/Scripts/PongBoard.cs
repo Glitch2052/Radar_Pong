@@ -1,10 +1,13 @@
+using System;
 using System.Collections;
+using System.Collections.Generic;
 using DG.Tweening;
 using Lofelt.NiceVibrations;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Random = UnityEngine.Random;
 
 public class PongBoard : MonoBehaviour
 {
@@ -17,6 +20,7 @@ public class PongBoard : MonoBehaviour
     public UIKnob leftController;
     public UIKnob rightController;
     public Ball ballPrefab;
+    public PowerUpManager powerUpManager;
 
     #region Score Data
     [Space(20), Header("UI Data")] 
@@ -28,7 +32,9 @@ public class PongBoard : MonoBehaviour
     [SerializeField] private CanvasGroup scoreCanvasGrp;
     [SerializeField] private Text countDownText;
 
-    private Ball currentBall;
+    public Ball currentBall { get; private set; }
+    public readonly List<Ball> allPongBalls = new List<Ball>();
+    public Paddle[] allPaddles;
     private int currentScore;
     private readonly string[] scrambledScoreVariants = new string[]
     {
@@ -51,6 +57,9 @@ public class PongBoard : MonoBehaviour
     [SerializeField] public AudioClip ballDestroyClip;
     
     #endregion
+
+    public event Action OnGameStarted;
+    public event Action OnGameEnded;
 
     public int CurrentScore
     {
@@ -84,7 +93,7 @@ public class PongBoard : MonoBehaviour
 
         currentBall = Instantiate(ballPrefab,gameTransform);
         currentBall.OnCollidedWithPaddle += OnBallCollideWithPaddle;
-        currentBall.OnDestroyed += OnBallDestroyed;
+        currentBall.OnDestroyed += RemoveBallEntryFromList;
         currentBall.gameObject.SetActive(false);
         
         StartCoroutine(StartCountDownBeforeInit());
@@ -99,10 +108,15 @@ public class PongBoard : MonoBehaviour
         leftController.Init();
         rightController.Init();
         currentBall.Init();
+        currentBall.StartRandomBallMovement();
+        allPongBalls.Add(currentBall);
 
         // StartCoroutine(FlickerBorderCoroutine());
         GameManager.instance.StartGameMusic(bgMusicClip[Random.Range(0,bgMusicClip.Length - 1)],0.5f);
+        powerUpManager.StartPowerUpSpawn();
         isReady = true;
+
+        OnGameStarted?.Invoke();
     }
 
     void Update()
@@ -133,7 +147,7 @@ public class PongBoard : MonoBehaviour
         }
     }
 
-    private void OnBallDestroyed()
+    /*private void OnBallDestroyed()
     {
         GameManager.instance.uiManager.PauseGame(() =>
         {
@@ -158,7 +172,7 @@ public class PongBoard : MonoBehaviour
 
             gameTransform.gameObject.SetActive(false);
         });
-    }
+    }*/
 
     public void DisableScoreText()
     {
@@ -252,11 +266,69 @@ public class PongBoard : MonoBehaviour
 
         yield return FlickerBorderCoroutine();
     }
+
+    public void EndGame()
+    {
+        GameManager.instance.StopGameMusic();
+        
+        GameManager.instance.uiManager.PauseGame(() =>
+        {
+            monitorScoreText.gameObject.SetActive(false);
+
+            int bestScore = PlayerPrefs.GetInt(StringID.HighScore, 0);
+            if (CurrentScore > bestScore)
+            {
+                newText.gameObject.SetActive(true);
+                bestScore = CurrentScore;
+                PlayerPrefs.SetInt(StringID.HighScore,CurrentScore);
+            }
+            else
+                newText.gameObject.SetActive(false);
+
+            gameEndScoreText.text = $"Score:{monitorScoreText.text}";
+            string bestScoreString = bestScore < 10 ? bestScore.ToString().PadLeft(2, '0') : bestScore.ToString();
+            bestScoreText.text = $"Best:{bestScoreString}";
+            gameEndScoreText.gameObject.SetActive(true);
+            gameEndScoreText.transform.DOLocalMoveY(1.8f, 0.4f).From(1.4f);
+            scoreCanvasGrp.DOFade(1f, 0.75f).From(0);
+
+            gameTransform.gameObject.SetActive(false);
+        });
+        Ball.ResetBallCount();
+        allPongBalls.Clear();
+        OnGameEnded?.Invoke();
+    }
     
     public static float Hash(float x)
     {
         int n = Mathf.FloorToInt(x * 1000f);
         n = (n << 13) ^ n;
         return 1.0f - ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0f;
+    }
+
+    public void SpawnNewBallWithVelocity(Vector2 newVelocity, Vector3 spawnPos)
+    {
+        var ball = Instantiate(ballPrefab, spawnPos, Quaternion.identity ,gameTransform);
+        ball.OnCollidedWithPaddle += OnBallCollideWithPaddle;
+        ball.OnDestroyed += RemoveBallEntryFromList;
+        ball.Init();
+        ball.SetBallVelocity(newVelocity);
+        allPongBalls.Add(ball);
+    }
+
+    public void RemoveBallEntryFromList(Ball ball)
+    {
+        if (allPongBalls.Contains(ball))
+        {
+            allPongBalls.Remove(ball);
+            if (ball == currentBall && allPongBalls.Count > 0)
+                currentBall = allPongBalls[0];
+        }
+    }
+
+    public void ShakeMonitorCamera()
+    {
+        monitorCamera.transform.DOKill(true);
+        monitorCamera.transform.DOPunchPosition(Random.insideUnitCircle * 0.5f, 0.7f);
     }
 }

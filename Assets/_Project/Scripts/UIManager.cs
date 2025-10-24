@@ -11,6 +11,7 @@ public class UIManager : MonoBehaviour
     [Space(20), Header("SplashScreen")]
     [SerializeField] private SpriteRenderer logoRenderer;
     [SerializeField] private TextMeshPro logoText;
+    [SerializeField] private TextMeshPro gameNameText;
 
     [Space(20), Header("Game UI Data")] 
     [SerializeField] private AudioClip uiTapClip;
@@ -167,7 +168,7 @@ public class UIManager : MonoBehaviour
         fadeInSequence.Join(logoRenderer.transform.DOLocalMoveY(1.4f, 0.8f).SetDelay(startDelay).SetEase(Ease.OutQuad));
         yield return fadeInSequence.WaitForCompletion();
         
-        yield return TypeSplashScreenText(startDelay,0.12f);
+        yield return TypeSplashScreenText("AstroRock\nGames",logoText ,startDelay,0.12f);
         
         Sequence fadeOutSequence = DOTween.Sequence();
         fadeOutSequence.Append(logoRenderer.DOFade(0, 0.6f)).SetDelay(startDelay);
@@ -175,18 +176,21 @@ public class UIManager : MonoBehaviour
         fadeOutSequence.Join(logoText.transform.DOLocalMoveY(-2.4f,0.6f).SetDelay(startDelay).SetEase(Ease.InQuad));
         fadeOutSequence.Join(logoText.DOFade(0f,0.4f).SetDelay(startDelay));
         yield return fadeOutSequence.WaitForCompletion();
+        
+        yield return TypeSplashScreenText("RADAR\nPONG", gameNameText ,startDelay,0.12f);
+        yield return gameNameText.DOFade(0f, 0.5f).WaitForCompletion();
     }
     
-    IEnumerator TypeSplashScreenText(float startDelay,float delayPerChar)
+    IEnumerator TypeSplashScreenText(string text, TextMeshPro textDisplay ,float startDelay,float delayPerChar)
     {
-        string fullText = "AstroRock\nGames";
+        string fullText = text;
         logoText.text = "";
 
         WaitForSeconds waitForSeconds = new WaitForSeconds(delayPerChar);
         yield return new WaitForSeconds(startDelay);
         foreach (var letter in fullText)
         {
-            logoText.text += letter;
+            textDisplay.text += letter;
             yield return waitForSeconds;
         }
     }

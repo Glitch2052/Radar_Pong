@@ -6,7 +6,8 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/GameScene_Portrait.unity
+    path: Assets/_Project/Scenes/GameScene_Portrait.unity
     guid: dc7f7f2f60832450c8ebf74af9dd72f8
   m_configObjects:
     com.unity.adaptiveperformance.simulator.provider_settings: {fileID: 11400000, guid: cb719e0b162e449b199539947db6ea1f, type: 2}
+  m_UseUCBPForAssetBundles: 0

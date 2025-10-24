@@ -10,7 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 152168721366786256}
   - component: {fileID: 3629686713674838341}
-  m_Layer: 7
+  m_Layer: 8
   m_Name: Trail
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -50,6 +50,9 @@ TrailRenderer:
   m_ReflectionProbeUsage: 0
   m_RayTracingMode: 0
   m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -155,7 +158,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7147218298816583802}
   - component: {fileID: 6341962343310158396}
-  m_Layer: 7
+  m_Layer: 8
   m_Name: graphic
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -194,6 +197,9 @@ SpriteRenderer:
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 0
   m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -241,9 +247,9 @@ GameObject:
   - component: {fileID: 574925067214765123}
   - component: {fileID: 3554062018097210350}
   - component: {fileID: 1231497057515516361}
-  m_Layer: 7
+  m_Layer: 8
   m_Name: Ball
-  m_TagString: Untagged
+  m_TagString: Ball
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -267,7 +273,7 @@ Transform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!50 &574925067214765123
 Rigidbody2D:
-  serializedVersion: 4
+  serializedVersion: 5
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -278,8 +284,8 @@ Rigidbody2D:
   m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
   m_Mass: 1
-  m_LinearDrag: 0
-  m_AngularDrag: 0
+  m_LinearDamping: 0
+  m_AngularDamping: 0
   m_GravityScale: 0
   m_Material: {fileID: 0}
   m_IncludeLayers:
@@ -304,7 +310,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1ca460373a6b24eeaa2aa97007ea3f56, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  moveSpeed: 5
+  moveSpeed: 3.6
   graphicRenderer: {fileID: 6341962343310158396}
   collideVfx: {fileID: 703648768374747004, guid: 6d677a25a9bae42d3a9f4a25cf93db62, type: 3}
 --- !u!58 &1231497057515516361
@@ -315,6 +321,7 @@ CircleCollider2D:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6009631341256596613}
   m_Enabled: 1
+  serializedVersion: 3
   m_Density: 1
   m_Material: {fileID: 6200000, guid: 6823aeb3fe19e4a049b5692dc0c98023, type: 2}
   m_IncludeLayers:
@@ -338,7 +345,7 @@ CircleCollider2D:
     m_Bits: 4294967295
   m_IsTrigger: 0
   m_UsedByEffector: 0
-  m_UsedByComposite: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  serializedVersion: 2
-  m_Radius: 0.11
+  m_Radius: 0.13
