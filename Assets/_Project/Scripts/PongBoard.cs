@@ -21,6 +21,7 @@ public class PongBoard : MonoBehaviour
     public UIKnob rightController;
     public Ball ballPrefab;
     public PowerUpManager powerUpManager;
+    public CollectibleManager collectibleManager;
 
     #region Score Data
     [Space(20), Header("UI Data")] 
@@ -31,6 +32,8 @@ public class PongBoard : MonoBehaviour
     [SerializeField] private TextMeshProUGUI newText;
     [SerializeField] private CanvasGroup scoreCanvasGrp;
     [SerializeField] private Text countDownText;
+
+    private float lastBallSpeed = 1;
 
     public Ball currentBall { get; private set; }
     public readonly List<Ball> allPongBalls = new List<Ball>();
@@ -59,6 +62,8 @@ public class PongBoard : MonoBehaviour
     #endregion
 
     public event Action OnGameStarted;
+    public event Action OnGameContinued;
+    public event Action OnGameRetrying;
     public event Action OnGameEnded;
 
     public int CurrentScore
@@ -73,7 +78,6 @@ public class PongBoard : MonoBehaviour
     
     private void Awake()
     {
-        Application.targetFrameRate = 60;
         isReady = false;
         
         if (instance != null && instance != this)
@@ -94,9 +98,11 @@ public class PongBoard : MonoBehaviour
         currentBall = Instantiate(ballPrefab,gameTransform);
         currentBall.OnCollidedWithPaddle += OnBallCollideWithPaddle;
         currentBall.OnDestroyed += RemoveBallEntryFromList;
+        currentBall.OnDestroyed += UpdateLastBallSpeed;
         currentBall.gameObject.SetActive(false);
         
-        StartCoroutine(StartCountDownBeforeInit());
+        //Calls StartGame After CountDown
+        StartCoroutine(StartCountDownBeforeInit(StartGame));
     }
 
     private void StartGame()
@@ -113,7 +119,6 @@ public class PongBoard : MonoBehaviour
 
         // StartCoroutine(FlickerBorderCoroutine());
         GameManager.instance.StartGameMusic(bgMusicClip[Random.Range(0,bgMusicClip.Length - 1)],0.5f);
-        powerUpManager.StartPowerUpSpawn();
         isReady = true;
 
         OnGameStarted?.Invoke();
@@ -190,7 +195,7 @@ public class PongBoard : MonoBehaviour
         if(scoreText != null) scoreText.text = monitorScoreText.text;
     }
 
-    private IEnumerator StartCountDownBeforeInit()
+    private IEnumerator StartCountDownBeforeInit(Action onCountDownCompleteAction)
     {
         GameManager.instance.StartGameMusic(countDownClip,0.3f,false);
         countDownText.gameObject.SetActive(true);
@@ -203,7 +208,7 @@ public class PongBoard : MonoBehaviour
         yield return null;
         monitorScoreText.gameObject.SetActive(true);
         countDownText.gameObject.SetActive(false);
-        StartGame();
+        onCountDownCompleteAction?.Invoke();
     }
 
     private IEnumerator FlickerTextCoroutine()
@@ -271,7 +276,7 @@ public class PongBoard : MonoBehaviour
     {
         GameManager.instance.StopGameMusic();
         
-        GameManager.instance.uiManager.PauseGame(() =>
+        GameManager.instance.uiManager.ShowRetryMenu(() =>
         {
             monitorScoreText.gameObject.SetActive(false);
 
@@ -298,6 +303,57 @@ public class PongBoard : MonoBehaviour
         allPongBalls.Clear();
         OnGameEnded?.Invoke();
     }
+
+    public void ContinueGameFromLastState()
+    {
+        gameEndScoreText.gameObject.SetActive(false);
+        gameTransform.gameObject.SetActive(true);
+        
+        //Calls StartGame After CountDown
+        StartCoroutine(StartCountDownBeforeInit(ContinueAfterGameOver));
+        
+        void ContinueAfterGameOver()
+        {
+            UpdateScore(CurrentScore);
+            
+            Vector2 velocity = new Vector2(Random.Range(0f, 1f) <= 0.5f ? 1f : -1f, Random.Range(-0.32f, 0.32f)).normalized;
+            SpawnNewBallWithVelocity(velocity,gameTransform.position,lastBallSpeed);
+
+            // StartCoroutine(FlickerBorderCoroutine());
+            GameManager.instance.ResumeGameMusic();
+            OnGameContinued?.Invoke();
+            isReady = true;
+        }
+    }
+
+    public void EndGameFromPauseMenu()
+    {
+        GameManager.instance.StopGameMusic();
+        monitorScoreText.gameObject.SetActive(false);
+
+        // int bestScore = PlayerPrefs.GetInt(StringID.HighScore, 0);
+        // if (CurrentScore > bestScore)
+        // {
+        //     newText.gameObject.SetActive(true);
+        //     bestScore = CurrentScore;
+        //     PlayerPrefs.SetInt(StringID.HighScore,CurrentScore);
+        // }
+        // else
+        //     newText.gameObject.SetActive(false);
+        //
+        // gameEndScoreText.text = $"Score:{monitorScoreText.text}";
+        // string bestScoreString = bestScore < 10 ? bestScore.ToString().PadLeft(2, '0') : bestScore.ToString();
+        // bestScoreText.text = $"Best:{bestScoreString}";
+        // gameEndScoreText.gameObject.SetActive(true);
+        // gameEndScoreText.transform.DOLocalMoveY(1.8f, 0.4f).From(1.4f);
+        // scoreCanvasGrp.DOFade(1f, 0.75f).From(0);
+
+        // gameTransform.gameObject.SetActive(false);
+        
+        Ball.ResetBallCount();
+        allPongBalls.Clear();
+        OnGameEnded?.Invoke();
+    }
     
     public static float Hash(float x)
     {
@@ -306,12 +362,14 @@ public class PongBoard : MonoBehaviour
         return 1.0f - ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0f;
     }
 
-    public void SpawnNewBallWithVelocity(Vector2 newVelocity, Vector3 spawnPos)
+    public void SpawnNewBallWithVelocity(Vector2 newVelocity, Vector3 spawnPos, float moveSpeed)
     {
         var ball = Instantiate(ballPrefab, spawnPos, Quaternion.identity ,gameTransform);
         ball.OnCollidedWithPaddle += OnBallCollideWithPaddle;
         ball.OnDestroyed += RemoveBallEntryFromList;
+        ball.OnDestroyed += UpdateLastBallSpeed;
         ball.Init();
+        ball.SetMoveSpeed(moveSpeed);
         ball.SetBallVelocity(newVelocity);
         allPongBalls.Add(ball);
     }
@@ -326,9 +384,19 @@ public class PongBoard : MonoBehaviour
         }
     }
 
+    private void UpdateLastBallSpeed(Ball ball)
+    {
+        lastBallSpeed = ball.moveSpeed;
+    }
+
     public void ShakeMonitorCamera()
     {
         monitorCamera.transform.DOKill(true);
         monitorCamera.transform.DOPunchPosition(Random.insideUnitCircle * 0.5f, 0.7f);
+    }
+
+    public void OnRetryingGameFromStart()
+    {
+        OnGameRetrying?.Invoke();
     }
 }

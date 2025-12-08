@@ -13,5 +13,6 @@ MonoBehaviour:
   m_Name: Long Paddle
   m_EditorClassIdentifier: 
   type: 1
-  prefab: {fileID: 0}
-  duration: 5
+  sprite: {fileID: 21300000, guid: b0f275f51e3c94c6ca133e14599bac3a, type: 3}
+  baseDuration: 5
+  rarityWeight: 3

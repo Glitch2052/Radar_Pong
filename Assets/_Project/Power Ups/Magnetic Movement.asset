@@ -13,5 +13,6 @@ MonoBehaviour:
   m_Name: Magnetic Movement
   m_EditorClassIdentifier: 
   type: 2
-  prefab: {fileID: 0}
-  duration: 5
+  sprite: {fileID: 21300000, guid: d0f09569c13804aa693ae176d60a9770, type: 3}
+  baseDuration: 5
+  rarityWeight: 2

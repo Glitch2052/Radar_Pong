@@ -4,7 +4,9 @@ using UnityEngine;
 public class PowerUpData : ScriptableObject
 {
     public PowerUpType type;
-    public float duration = 5f; // Default duration
+    public Sprite sprite;
+    public float baseDuration = 5f; // Default duration
+    public float rarityWeight;
 }
 
 public enum PowerUpType

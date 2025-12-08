@@ -6,6 +6,13 @@
       "source": "builtin",
       "dependencies": {}
     },
+    "com.unity.ads.ios-support": {
+      "version": "1.0.1",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://packages.unity.com"
+    },
     "com.unity.bindings.openimageio": {
       "version": "1.0.0",
       "depth": 1,

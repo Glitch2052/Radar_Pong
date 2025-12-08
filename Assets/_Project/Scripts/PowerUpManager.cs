@@ -5,36 +5,51 @@ using DG.Tweening;
 
 public class PowerUpManager : MonoBehaviour
 {
-    public static PowerUpManager Instance;
     public List<PowerUp> powerUps;
-    public float spawnInterval = 3f;
+    public float startDelay = 0f;
+    public float baseInterval = 15f;
+    public Vector2 spawnIntervalRange;
+    
     public Transform spawnArea; // Define area for spawning
     public float spawnRadius = 4; // Spawn range
+    [SerializeField] private Transform uiDisplayParentTransform;
+    [SerializeField] private PowerUpActivator powerUpActivatorPrefab;
+
+    private Dictionary<PowerUpType, PowerUpActivator> powerUpDisplayTimerDictionary = new ();
+    private Dictionary<PowerUpType, float> activePowerUps = new ();
+    private PowerUp currentPowerUp;
+    // private List<PowerUp> spawnedPowerUps = new();
 
     private bool canSpawn = true;
-    private PowerUp activePowerUp;
     private Coroutine spawnCoroutine;
-    
+
     private readonly float defaultPaddleLength = 1.4f;
 
-    private void Awake()
-    {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
-    }
+    [SerializeField] private bool testPowerUps;
 
     public void Init()
     {
         PongBoard.instance.OnGameStarted += StartPowerUpSpawn;
+        PongBoard.instance.OnGameContinued += ResumePowerUpSpawn;
         PongBoard.instance.OnGameEnded += StopPowerUpSpawn;
+        
+        powerUpDisplayTimerDictionary.Clear();
+        // spawnedPowerUps.Clear();
     }
 
     public void StartPowerUpSpawn()
     {
         if(spawnCoroutine != null)
             StopCoroutine(spawnCoroutine);
-        spawnCoroutine = StartCoroutine(SpawnPowerUps());
+        spawnCoroutine = StartCoroutine(SpawnPowerUpLoop(true));
 
+    }
+
+    public void ResumePowerUpSpawn()
+    {
+        if(spawnCoroutine != null)
+            StopCoroutine(spawnCoroutine);
+        spawnCoroutine = StartCoroutine(SpawnPowerUpLoop(false));
     }
 
     public void StopPowerUpSpawn()
@@ -46,115 +61,127 @@ public class PowerUpManager : MonoBehaviour
 
     private void ClearRemainingPowerUpsAndItsEffects()
     {
-        if (activePowerUp != null)
+        foreach (KeyValuePair<PowerUpType,PowerUpActivator> keyValuePair in powerUpDisplayTimerDictionary)
         {
-            Destroy(activePowerUp);
-            activePowerUp = null;
+            if(keyValuePair.Key == PowerUpType.MultipleBalls) continue;
+            Destroy(keyValuePair.Value.gameObject);
         }
+
+        if (currentPowerUp != null)
+        {
+            Destroy(currentPowerUp.gameObject);
+            currentPowerUp = null;
+        }
+
+        // foreach (var powerUp in spawnedPowerUps)
+        // {
+        //     Destroy(powerUp.gameObject);
+        // }
+        
+        powerUpDisplayTimerDictionary.Clear();
+        // spawnedPowerUps.Clear();
+        
         Ball.EnableMagnet(false);
         Time.timeScale = 1;
         PongBoard.instance.leftController.controlledPaddle.paddleMesh.UpdatePaddleLength(defaultPaddleLength);
         PongBoard.instance.rightController.controlledPaddle.paddleMesh.UpdatePaddleLength(defaultPaddleLength);
     }
 
-    private IEnumerator SpawnPowerUps()
+    private IEnumerator SpawnPowerUpLoop(bool waitForInitialDelay)
     {
+        if(waitForInitialDelay)
+            yield return Utilities.WaitGameplaySeconds(startDelay);
+        
         while (true)
         {
-            if (canSpawn && activePowerUp == null)
+            if (canSpawn && currentPowerUp == null)
             {
-                yield return new WaitForSeconds(spawnInterval);
-
-                PowerUp randomPowerUp = powerUps[Random.Range(0, powerUps.Count)];
-                Vector2 spawnPos = (Vector2)spawnArea.position + Random.insideUnitCircle * spawnRadius;
-                activePowerUp = Instantiate(randomPowerUp, spawnPos, Quaternion.identity);
-
-                activePowerUp.transform.localScale = Vector3.one * 0.2f;
-                Tween scaleUpTween = activePowerUp.transform.DOScale(Vector3.one, 0.5f).SetEase(Ease.OutBack,3f);
-                yield return scaleUpTween.WaitForCompletion();
+#if UNITY_EDITOR
+                yield return Utilities.WaitGameplaySeconds(1f);
+#else
+                yield return Utilities.WaitGameplaySeconds(GetAdaptiveInterval());
+#endif
                 
-                activePowerUp.Init();
+                PowerUp randomPowerUp = GetWeightedPowerUp(); /*powerUps[Random.Range(0, powerUps.Count)]*/
+                Vector2 clampedRandomPoint = Random.insideUnitCircle * spawnRadius;
+                Vector2 spawnPos = (Vector2)spawnArea.position + clampedRandomPoint;
+                currentPowerUp = Instantiate(randomPowerUp, spawnPos, Quaternion.identity);
+                // spawnedPowerUps.Add(currentPowerUp);
+                currentPowerUp.Init();
+
+                currentPowerUp.transform.localScale = Vector3.one * 0.2f;
+                Tween scaleUpTween = currentPowerUp.transform.DOScale(Vector3.one, 0.5f).SetUpdate(true).SetEase(Ease.OutBack,3f);
+                yield return scaleUpTween.WaitForCompletion();
             }
             yield return null;
         }
     }
 
-    public void DestroyPowerUpAfterDuration(PowerUp powerUp)
+    private float GetAdaptiveInterval()
     {
-        if (activePowerUp != null)
+        int score = PongBoard.instance.CurrentScore;
+        float interval = baseInterval;
+        interval *= Mathf.Clamp(1 - Mathf.Log10(1 + score) * 0.08f, 0.6f, 1f);
+        interval = Mathf.Max(5f, interval);
+        return interval;
+    }
+
+    private PowerUp GetWeightedPowerUp()
+    {
+        float total = 0f;
+        foreach (var p in powerUps) total += p.data.rarityWeight;
+        float r = Random.value * total;
+        float acc = 0f;
+        foreach (var powerUp in powerUps)
         {
-            Destroy(activePowerUp.gameObject);
-            activePowerUp = null;
+            acc += powerUp.data.rarityWeight;
+            if (r <= acc) return powerUp;
+        }
+        return null;
+    }
+
+    public void RemovePowerUpOnCollectOrExpire(PowerUp powerUp)
+    {
+        if(currentPowerUp != null && currentPowerUp == powerUp)
+        {
+            Destroy(powerUp.gameObject);
+            currentPowerUp = null;
         }
     }
 
-    public void ActivatePowerUp(PowerUpData data)
+    public void CollectAndActivatePowerUp(PowerUp powerUp, Ball ball)
     {
-        switch (data.type)
-        {
-            case PowerUpType.SlowTime:
-                StartCoroutine(SlowTime(data.duration));
-                break;
-            case PowerUpType.LongPaddle:
-                StartCoroutine(LongPaddle(data.duration));
-                break;
-            case PowerUpType.Magnet:
-                StartCoroutine(MagnetEffect(data.duration));
-                break;
-            case PowerUpType.MultipleBalls:
-                StartCoroutine(MultiplePongBalls(data.duration));
-                break;
-        }
+        var data = powerUp.data;
+        ActivatePowerUpWithUiTimer(data, ball);
+        RemovePowerUpOnCollectOrExpire(powerUp);
     }
 
-    private IEnumerator LongPaddle(float duration)
+    public Sprite GetPowerUpSpriteIcon(PowerUpType powerUpType)
     {
-        float currLength = 0;
-        float powerUpValue = 3f;
-        Tween scaleUpTween = DOTween.To(x => currLength = x,defaultPaddleLength,powerUpValue, 1f).SetEase(Ease.OutQuad);
-        scaleUpTween.onUpdate += () =>
+        foreach (PowerUp powerUp in powerUps)
         {
-            PongBoard.instance.leftController.controlledPaddle.paddleMesh.UpdatePaddleLength(currLength);
-            PongBoard.instance.rightController.controlledPaddle.paddleMesh.UpdatePaddleLength(currLength);
-        };
-        yield return scaleUpTween.WaitForCompletion();
-        yield return new WaitForSeconds(duration);
+            if (powerUp.data.type == powerUpType) return powerUp.data.sprite;
+        }
+        return null;
+    }
+
+    private void ActivatePowerUpWithUiTimer(PowerUpData data, Ball ball)
+    {
+        if (powerUpDisplayTimerDictionary.TryGetValue(data.type, out PowerUpActivator uiTimer))
+        {
+            uiTimer.AddDurationToTimer(data.baseDuration, ball);
+            return;
+        }
+
+        uiTimer = Instantiate(powerUpActivatorPrefab, uiDisplayParentTransform);
         
-        Tween scaleDownTween = DOTween.To(x => currLength = x,powerUpValue,defaultPaddleLength, 0.8f).SetEase(Ease.OutQuad);
-        scaleDownTween.onUpdate += () =>
+        powerUpDisplayTimerDictionary.Add(data.type, uiTimer);
+        
+        uiTimer.Init(data.type);
+        uiTimer.StartDisplayTimer(data.baseDuration,ball);
+        uiTimer.OnTimerEndAction += () =>
         {
-            PongBoard.instance.leftController.controlledPaddle.paddleMesh.UpdatePaddleLength(currLength);
-            PongBoard.instance.rightController.controlledPaddle.paddleMesh.UpdatePaddleLength(currLength);
+            powerUpDisplayTimerDictionary.Remove(data.type);
         };
-    }
-
-    private IEnumerator SlowTime(float duration)
-    {
-        Time.timeScale = 0.5f;
-        yield return new WaitForSecondsRealtime(duration);
-        Time.timeScale = 1f;
-    }
-
-    private IEnumerator MagnetEffect(float duration)
-    {
-        Ball.EnableMagnet(true);
-        yield return new WaitForSeconds(duration);
-        Ball.EnableMagnet(false);
-    }
-    
-    private IEnumerator MultiplePongBalls(float duration)
-    {
-        // Ball[] balls = FindObjectsOfType<Ball>();
-        // foreach (var ball in balls) ball.EnableMagnet(true);
-        Vector2 currVelocity = PongBoard.instance.currentBall.currVelocity.normalized;
-        Vector3 spawnPos = PongBoard.instance.currentBall.transform.position;
-        for (int i = 0; i < 2; i++)
-        {
-            yield return new WaitForSeconds(0.2f);
-            Vector2 rndVelocity = Utilities.GetRandomizedVelocity(currVelocity,30);
-            PongBoard.instance.SpawnNewBallWithVelocity(rndVelocity,spawnPos);
-        }
-        yield return new WaitForSeconds(duration);
-        // foreach (var ball in balls) ball.EnableMagnet(false);
     }
 }

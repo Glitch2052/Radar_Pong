@@ -13,5 +13,6 @@ MonoBehaviour:
   m_Name: Slow Down TIme
   m_EditorClassIdentifier: 
   type: 0
-  prefab: {fileID: 0}
-  duration: 5
+  sprite: {fileID: 21300000, guid: ca2e15bf3e4174d96a1f40cec9d2283e, type: 3}
+  baseDuration: 5
+  rarityWeight: 3

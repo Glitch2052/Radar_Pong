@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Mathematics;
@@ -123,5 +124,25 @@ public static class Utilities
         Vector2 newVelocity = rotation * baseVelocity;
 
         return newVelocity;
+    }
+
+    public static Vector2 GetRandomPointInRing(float innerRadius, float outerRadius)
+    {
+        float angle = Random.Range(0, 2 * Mathf.PI);
+        float radius = Random.Range(innerRadius, outerRadius);
+        Vector2 randomPoint = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+        return randomPoint;
+    }
+    
+    public static IEnumerator WaitGameplaySeconds(float seconds)
+    {
+        float elapsed = 0f;
+        while (elapsed < seconds)
+        {
+            if (!GameManager.instance.IsPaused)
+                elapsed += Time.unscaledDeltaTime;
+            
+            yield return null;
+        }
     }
 }

@@ -1,12 +1,15 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 public class GameManager : MonoBehaviour
 {
     public UIManager uiManager;
+    public CoinManagerSO coinManagerSo;
     [SerializeField] private AudioSource sfxAudioPlayer;
     [SerializeField] private AudioSource bgmAudioPlayer;
+
+    public bool IsPaused { get; private set; }
+    private float prevTimeScale = 1f;
     
     public static GameManager instance;
 
@@ -22,18 +25,23 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    IEnumerator Start()
+    public IEnumerator Init()
     {
         uiManager.OnBgmToggleAction += (value) => ToggleMuteGameMusic(!value);
         uiManager.Init();
-        PowerUpManager.Instance.Init();
-        
         yield return null;
+        
+        coinManagerSo.Init();
         
         PongBoard.instance.FlickerBorder();
         yield return uiManager.PlaySplashScreen();
         
         uiManager.ShowMainPanel();
+        
+        PongBoard.instance.powerUpManager.Init();
+        PongBoard.instance.collectibleManager.Init();
+        
+        AdManager.Instance.ShowBanner();
     }
 
     public void StartGame()
@@ -41,18 +49,11 @@ public class GameManager : MonoBehaviour
         PongBoard.instance.Init();
     }
 
-    public void PauseGame()
+    public void ContinueGameFromLastState()
     {
-        // uiManager.PauseGameToMainMenu();
+        PongBoard.instance.ContinueGameFromLastState();
     }
-
-    private void Update()
-    {
-        if (Input.GetKeyDown(KeyCode.A))
-        {
-            PauseGame();
-        }
-    }
+    
 
     public void PlayOneShot(AudioClip clip, float volume = 1)
     {
@@ -69,6 +70,12 @@ public class GameManager : MonoBehaviour
         bgmAudioPlayer.Play();
     }
 
+    public void ResumeGameMusic()
+    {
+        if (bgmAudioPlayer)
+            bgmAudioPlayer.Play();
+    }
+
     public void StopGameMusic()
     {
         if(bgmAudioPlayer)
@@ -78,5 +85,21 @@ public class GameManager : MonoBehaviour
     private void ToggleMuteGameMusic(bool value)
     {
         if (bgmAudioPlayer) bgmAudioPlayer.mute = value;
+    }
+
+    public void PauseGameState()
+    {
+        IsPaused = true;
+        if (IsPaused)
+            prevTimeScale = Time.timeScale;
+        Time.timeScale = IsPaused ? 0 : prevTimeScale;
+    }
+    
+    public void ResumeGameState()
+    {
+        IsPaused = false;
+        if (IsPaused)
+            prevTimeScale = Time.timeScale;
+        Time.timeScale = IsPaused ? 0 : prevTimeScale;
     }
 }

@@ -5,6 +5,8 @@ using DG.Tweening;
 using Lofelt.NiceVibrations;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
+using UnityEngine.UI;
 
 public class UIManager : MonoBehaviour
 {
@@ -17,21 +19,41 @@ public class UIManager : MonoBehaviour
     [SerializeField] private AudioClip uiTapClip;
     [SerializeField] private TextMeshProUGUI bgmText;
     [SerializeField] private TextMeshProUGUI sfxText;
+    [SerializeField] private Image sensitiviyFillImage;
     [SerializeField] private RectTransform monitorTransform;
     [SerializeField] private RectTransform leftPaddleTransform;
     [SerializeField] private RectTransform rightPaddleTransform;
+    [SerializeField] private RectTransform pauseButton;
     
     [Space(20),Header("Menu UI Data")] 
     [SerializeField] private RectTransform menuPanel;
     [SerializeField] private RectTransform settingsPanel;
     [SerializeField] private RectTransform quitPanel;
     [SerializeField] private RectTransform pausePanel;
+    [SerializeField] private RectTransform noAdsPanel;
 
-    [SerializeField]private CanvasGroup menuCanvasGroup;
-    [SerializeField]private CanvasGroup settingsCanvasGroup;
-    [SerializeField]private CanvasGroup quitCanvasGroup;
+    [SerializeField] private CanvasGroup menuCanvasGroup;
+    [SerializeField] private CanvasGroup settingsCanvasGroup;
+    [SerializeField] private CanvasGroup quitCanvasGroup;
+    [SerializeField] private CanvasGroup retryCanvasGroup;
     [SerializeField] private CanvasGroup pauseCanvasGroup;
+    [SerializeField] private CanvasGroup NoAdsCanvasGroup;
 
+    [Space(20), Header("Collectible UI")] 
+    [SerializeField] private Transform collectiblePanel;
+    [SerializeField] private Transform starTransform;
+    [SerializeField] private TextMeshPro starCountText;
+
+    //Count For Showing Interstitial Ad
+    private readonly int retryCountForInterstitial = 2;
+    private int currentRetryCount = 0;
+
+    private float sensitivityLerpValue = 0;
+    private float sensitivityCurrFillValue = 0.2f;
+    private float sensitivityMinFillValue = 0.2f;
+    private float sensitivityMaxFillValue = 1f;
+    private float lerpIncrementAmount = 0.25f;
+    
     private readonly float moveDistance = 120f;
     private readonly float fadeOutDuration = 0.3f;
     private readonly float fadeInDuration = 0.5f;
@@ -53,8 +75,10 @@ public class UIManager : MonoBehaviour
         {
             {StringID.Main, menuCanvasGroup},
             {StringID.Settings, settingsCanvasGroup},
+            {StringID.Retry, retryCanvasGroup},
             {StringID.Pause, pauseCanvasGroup},
-            {StringID.Quit, quitCanvasGroup}
+            {StringID.Quit, quitCanvasGroup},
+            {StringID.NoAdsPanel, NoAdsCanvasGroup},
         };
 
         foreach (var kvp in panelMap)
@@ -68,11 +92,21 @@ public class UIManager : MonoBehaviour
         SetDefaultToggleValue();
         
         SetMonitorSizeAndAnchorToCenter();
+        
+        float currentSensitivity = PlayerPrefs.GetFloat(StringID.KnobSensitivity,UIKnob.DefaultSensitivity);
+        sensitivityLerpValue = Mathf.InverseLerp(UIKnob.MinSensitivity, UIKnob.MaxSensitivity, currentSensitivity);
+        UpdateSensitivityUI();
+        UIKnob.UpdateKnobSensitivity(sensitivityLerpValue);
+
+        GameManager.instance.coinManagerSo.OnCoinsUpdated += UpdateCoinsPanel;
+        PongBoard.instance.OnGameStarted += () => { TogglePauseButton(true); };
+        PongBoard.instance.OnGameContinued += () => { TogglePauseButton(true); };
+        PongBoard.instance.OnGameEnded += () => { TogglePauseButton(false); };
     }
 
     private void SetUpGameUIForStart()
     {
-        HideMainPanelOnGameStart();
+        HidePanel(menuCanvasGroup);
         Sequence sequence = DOTween.Sequence();
         sequence.Append(monitorTransform.DOAnchorPosY(monitorPlayModeScreenPos.y, fadeInDuration)
             .SetEase(Ease.InOutSine));
@@ -80,21 +114,23 @@ public class UIManager : MonoBehaviour
             .SetEase(Ease.InOutSine));
         sequence.Join(rightPaddleTransform.DOAnchorPosX(rightPaddlePlayModeScreenPos.x, fadeInDuration)
             .SetEase(Ease.InOutSine));
+        sequence.SetUpdate(true);
         sequence.onComplete += () =>
         {
             GameManager.instance.StartGame();
         };
     }
 
-    public void PauseGame(Action onFadeInStartAction)
+    public void ShowRetryMenu(Action onFadeInStartAction)
     {
-        pauseCanvasGroup.gameObject.SetActive(true);
-        Tween tween = pauseCanvasGroup.DOFade(1, fadeInDuration).SetDelay(1f);
+        retryCanvasGroup.gameObject.SetActive(true);
+        Tween tween = retryCanvasGroup.DOFade(1, fadeInDuration).SetDelay(1f);
+        tween.SetUpdate(true);
         tween.OnStart(() => onFadeInStartAction?.Invoke());
         tween.onComplete += () =>
         {
-            pauseCanvasGroup.interactable = true;
-            pauseCanvasGroup.blocksRaycasts = true;
+            retryCanvasGroup.interactable = true;
+            retryCanvasGroup.blocksRaycasts = true;
         };
         // Vector2 paddleSize = leftPaddleTransform.rect.size;
         //
@@ -141,21 +177,25 @@ public class UIManager : MonoBehaviour
     {
         panelHistory.Push(StringID.Main);
         menuCanvasGroup.gameObject.SetActive(true);
-        menuCanvasGroup.DOFade(1, fadeInDuration).onComplete += () =>
+        menuCanvasGroup.transform.DOLocalMoveX(0, fadeInDuration).SetEase(Ease.InOutQuad).SetUpdate(true);
+        menuCanvasGroup.DOFade(1, fadeInDuration).SetUpdate(true).onComplete += () =>
         {
             menuCanvasGroup.interactable = true;
             menuCanvasGroup.blocksRaycasts = true;
         };
+
+        collectiblePanel.gameObject.SetActive(true);
     }
 
-    private void HideMainPanelOnGameStart()
+    private void HidePanel(CanvasGroup panelToHide, Action onHideCompleteAction = null)
     {
         panelHistory.Pop();
-        menuCanvasGroup.interactable = false;
-        menuCanvasGroup.blocksRaycasts = false;
-        menuCanvasGroup.DOFade(0, fadeOutDuration).onComplete += () =>
+        panelToHide.interactable = false;
+        panelToHide.blocksRaycasts = false;
+        panelToHide.DOFade(0, fadeOutDuration).SetUpdate(true).onComplete += () =>
         {
-            menuCanvasGroup.gameObject.SetActive(true);
+            panelToHide.gameObject.SetActive(true);
+            onHideCompleteAction?.Invoke();
         };
     }
     
@@ -214,33 +254,34 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    private void TransitionTo(string panelName)
+    public void TransitionTo(string panelName, Action onFadeStartAction = null, Action onFadeEndAction = null)
     {
         string current = panelHistory.Count > 0 ? panelHistory.Peek() : StringID.Main;
         
         if(panelName == current) return;
         
         panelHistory.Push(panelName);
-        StartCoroutine(AnimatePanels(panelMap[current], panelMap[panelName]));
+        StartCoroutine(AnimatePanels(panelMap[current], panelMap[panelName],onFadeStartAction: onFadeStartAction, onFadeEndAction: onFadeEndAction));
     }
 
-    private IEnumerator AnimatePanels(CanvasGroup from, CanvasGroup to, bool reverse = false)
+    private IEnumerator AnimatePanels(CanvasGroup from, CanvasGroup to, bool reverse = false, Action onFadeStartAction = null, Action onFadeEndAction = null)
     {
         float dir = reverse ? 1 : -1;
 
         from.interactable = false;
         from.blocksRaycasts = false;
 
-        from.transform.DOLocalMoveX(moveDistance * dir, fadeOutDuration).SetEase(Ease.InOutQuad);
-        from.DOFade(0, fadeOutDuration);
+        from.transform.DOLocalMoveX(moveDistance * dir, fadeOutDuration).SetEase(Ease.InOutQuad).SetUpdate(true);
+        from.DOFade(0, fadeOutDuration).SetUpdate(true).OnStart(() => onFadeStartAction?.Invoke());
 
-        to.transform.localPosition = new Vector3(-(moveDistance + 50) * dir , 0, 0);
+        to.transform.localPosition = new Vector3(-(moveDistance + 50) * dir , to.transform.localPosition.y, 0);
         to.gameObject.SetActive(true);
-        to.DOFade(1, fadeInDuration);
-        to.transform.DOLocalMoveX(0, fadeInDuration).SetEase(Ease.InOutQuad).onComplete += (() =>
+        to.DOFade(1, fadeInDuration).SetUpdate(true);
+        to.transform.DOLocalMoveX(0, fadeInDuration).SetEase(Ease.InOutQuad).SetUpdate(true).onComplete += (() =>
         {
             to.interactable = true;
             to.blocksRaycasts = true;
+            onFadeEndAction?.Invoke();
         });
         
         yield return null;
@@ -263,20 +304,105 @@ public class UIManager : MonoBehaviour
 
     public void OnRetryButtonClicked()
     {
-        pauseCanvasGroup.interactable = false;
-        pauseCanvasGroup.blocksRaycasts = false;
-        pauseCanvasGroup.DOFade(0, fadeOutDuration).onComplete += () =>
+        currentRetryCount++;
+        if (currentRetryCount >= retryCountForInterstitial)
+        {
+            AdManager.Instance.ShowInterstitial();
+            currentRetryCount = 0;
+        }
+        
+        PongBoard.instance.OnRetryingGameFromStart();
+        retryCanvasGroup.interactable = false;
+        retryCanvasGroup.blocksRaycasts = false;
+        retryCanvasGroup.DOFade(0, fadeOutDuration).SetUpdate(true).onComplete += () =>
         {
             GameManager.instance.StartGame();
-            pauseCanvasGroup.gameObject.SetActive(false);
+            retryCanvasGroup.gameObject.SetActive(false);
+        };
+    }
+
+    public void OnContinueButtonClicked()
+    {
+        if(AdManager.Instance.ShowRewardAd((value) =>
+           {
+               if (value)
+               {
+                   retryCanvasGroup.interactable = false;
+                   retryCanvasGroup.blocksRaycasts = false;
+                   retryCanvasGroup.DOFade(0, fadeOutDuration).SetUpdate(true).onComplete += () =>
+                   {
+                       GameManager.instance.ContinueGameFromLastState();
+                       retryCanvasGroup.gameObject.SetActive(false);
+                   };
+               }
+           }))
+        { }
+        else 
+            ShowNoAdsPanel();
+    }
+
+    private void ShowNoAdsPanel()
+    {
+        retryCanvasGroup.interactable = false;
+        retryCanvasGroup.blocksRaycasts = false;
+        retryCanvasGroup.DOFade(0, fadeOutDuration).SetUpdate(true).onComplete += () =>
+        {
+            retryCanvasGroup.gameObject.SetActive(false);
+        };
+        NoAdsCanvasGroup.gameObject.SetActive(true);
+        NoAdsCanvasGroup.DOFade(1, fadeInDuration).SetUpdate(true).onComplete += () =>
+        {
+            NoAdsCanvasGroup.interactable = true;
+            NoAdsCanvasGroup.blocksRaycasts = true;
+        };
+    }
+
+    public void OnBackFromNoAdsPanel()
+    {
+        NoAdsCanvasGroup.interactable = false;
+        NoAdsCanvasGroup.blocksRaycasts = false;
+        NoAdsCanvasGroup.DOFade(0, fadeOutDuration).SetUpdate(true).onComplete += () =>
+        {
+            NoAdsCanvasGroup.gameObject.SetActive(false);
+        };
+        retryCanvasGroup.gameObject.SetActive(true);
+        retryCanvasGroup.DOFade(1, fadeInDuration).SetUpdate(true).onComplete += () =>
+        {
+            retryCanvasGroup.interactable = true;
+            retryCanvasGroup.blocksRaycasts = true;
         };
     }
 
     public void OnMainMenuButtonClicked()
     {
+        retryCanvasGroup.interactable = false;
+        retryCanvasGroup.blocksRaycasts = false;
+        retryCanvasGroup.DOFade(0, fadeOutDuration).SetUpdate(true).onComplete += () =>
+        {
+            retryCanvasGroup.gameObject.SetActive(false);
+        };
+        PongBoard.instance.DisableScoreText();
+        
+        Vector2 paddleSize = leftPaddleTransform.rect.size;
+
+        
+        Sequence sequence = DOTween.Sequence();
+        sequence.Append(monitorTransform.DOAnchorPosY(0, fadeInDuration)
+            .SetEase(Ease.InOutSine));
+        sequence.Join(leftPaddleTransform.DOAnchorPosX(leftPaddlePlayModeScreenPos.x - paddleSize.x, fadeInDuration)
+            .SetEase(Ease.InOutSine));
+        sequence.Join(rightPaddleTransform.DOAnchorPosX(rightPaddlePlayModeScreenPos.x + paddleSize.x, fadeInDuration)
+            .SetEase(Ease.InOutSine));
+        sequence.SetUpdate(true);
+        sequence.onComplete += ShowMainPanel;
+    }
+
+    public void OnMainMenuButtonClickedFromPauseMenu()
+    {
+        PongBoard.instance.EndGameFromPauseMenu();
         pauseCanvasGroup.interactable = false;
         pauseCanvasGroup.blocksRaycasts = false;
-        pauseCanvasGroup.DOFade(0, fadeOutDuration).onComplete += () =>
+        pauseCanvasGroup.DOFade(0, fadeOutDuration).SetUpdate(true).onComplete += () =>
         {
             pauseCanvasGroup.gameObject.SetActive(false);
         };
@@ -292,6 +418,7 @@ public class UIManager : MonoBehaviour
             .SetEase(Ease.InOutSine));
         sequence.Join(rightPaddleTransform.DOAnchorPosX(rightPaddlePlayModeScreenPos.x + paddleSize.x, fadeInDuration)
             .SetEase(Ease.InOutSine));
+        sequence.SetUpdate(true);
         sequence.onComplete += ShowMainPanel;
     }
 
@@ -322,6 +449,52 @@ public class UIManager : MonoBehaviour
         bgmText.text = IsBgmEnabled ? StringID.On : StringID.Off;
         PlayerPrefs.SetInt(StringID.BgmEnabled,IsBgmEnabled ? 1 : 0);
         OnBgmToggleAction?.Invoke(IsBgmEnabled);
+    }
+
+    private void UpdateSensitivityUI()
+    {
+        sensitivityCurrFillValue = Mathf.Lerp(sensitivityMinFillValue, sensitivityMaxFillValue, sensitivityLerpValue);
+        sensitiviyFillImage.fillAmount = sensitivityCurrFillValue;
+    }
+
+    public void ToggleSensitivity()
+    {
+        GameManager.instance.PlayOneShot(uiTapClip);
+        
+        float currentSensitivity = PlayerPrefs.GetFloat(StringID.KnobSensitivity,UIKnob.DefaultSensitivity);
+        sensitivityLerpValue = Mathf.InverseLerp(UIKnob.MinSensitivity, UIKnob.MaxSensitivity, currentSensitivity);
+        
+        sensitivityLerpValue += lerpIncrementAmount;
+        if (sensitivityLerpValue > 1) sensitivityLerpValue = 0; 
+        UIKnob.UpdateKnobSensitivity(sensitivityLerpValue);
+        UpdateSensitivityUI();
+    }
+
+    public void UpdateCoinsPanel(int difference, int currentValue)
+    {
+        starTransform.DOKill(true);
+        starTransform.DOPunchScale(Vector3.one * 0.1f, 0.33f,6,0.8f).SetEase(Ease.InOutBack);
+        starCountText.text = currentValue.ToString();
+    }
+
+    public void TogglePauseButton(bool value)
+    {
+        pauseButton.gameObject.SetActive(value);
+    }
+
+    public void PauseGameState()
+    {
+        if(GameManager.instance.IsPaused) return;
+        GameManager.instance.PauseGameState();
+        TransitionTo(StringID.Pause);
+    }
+
+    public void ResumeGameState()
+    {
+        HidePanel(pauseCanvasGroup, () =>
+        {
+            GameManager.instance.ResumeGameState();
+        });
     }
 
     public void ExitApplication()

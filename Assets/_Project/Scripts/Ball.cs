@@ -20,7 +20,7 @@ public class Ball : MonoBehaviour
     public Vector2 currVelocity => rigidbody2D.linearVelocity;
 
     private Paddle currentPaddle;
-    readonly float detectionAngle = 60;
+    readonly float detectionAngle = 90f;
     private static bool isMagneticMovement;
 
     public void Init()
@@ -64,6 +64,11 @@ public class Ball : MonoBehaviour
         rigidbody2D.linearVelocity = velocity * moveSpeed;
     }
 
+    public void SetMoveSpeed(float speed)
+    {
+        moveSpeed = speed;
+    }
+
     public void SetBallVelocity(Vector2 newVelocity)
     {
         rigidbody2D.linearVelocity = newVelocity * moveSpeed;
@@ -77,17 +82,19 @@ public class Ball : MonoBehaviour
             paddle.OnCollidedWithBall();
             moveSpeed += 0.01f;
             moveSpeed = Mathf.Min(maxSpeed, moveSpeed);
-            rigidbody2D.linearVelocity = rigidbody2D.linearVelocity.normalized * moveSpeed;
+            rigidbody2D.linearVelocity = GetPaddleAffectedBallVelocity(paddle, other); //rigidbody2D.linearVelocity.normalized * moveSpeed;
             OnCollidedWithPaddle?.Invoke(paddle.paddleType,other.relativeVelocity);
         }
     }
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        if (collision.CompareTag("PowerUp") && collision.gameObject.TryGetComponent(out PowerUp powerUp))
+        if (collision.CompareTag("Collectible"))
         {
-            PowerUpManager.Instance.ActivatePowerUp(powerUp.data);
-            Destroy(powerUp.gameObject);
+            if(collision.gameObject.TryGetComponent(out PowerUp powerUp))
+                PongBoard.instance.powerUpManager.CollectAndActivatePowerUp( powerUp,this);
+            if(collision.gameObject.TryGetComponent(out Collectible collectible))
+                PongBoard.instance.collectibleManager.OnCollectibleTriggeredByBall(collectible, this);
         }
     }
 
@@ -107,6 +114,41 @@ public class Ball : MonoBehaviour
 
         OnDestroyed?.Invoke(this);
         Destroy(gameObject);
+    }
+
+    private Vector2 GetPaddleAffectedBallVelocity(Paddle paddle,Collision2D collision)
+    {
+        ContactPoint2D contact = collision.GetContact(0);
+        Vector2 normal = contact.normal;
+        Vector2 incoming = rigidbody2D.linearVelocity;
+
+        // Normal reflection
+        Vector2 reflected = Vector2.Reflect(incoming, normal);
+
+        // Get paddle velocity
+        Vector2 paddleVel = paddle.tangentialVelocity;
+
+        // Tangent along paddle surface (perpendicular to normal)
+        Vector2 tangent = new Vector2(-normal.y, normal.x);
+        float tangentialSpeed = Vector2.Dot(paddleVel, tangent);
+        Vector2 tangentialComponent = tangent * tangentialSpeed;
+        Vector2 modifiedDir = reflected + (tangentialComponent * 0.15f);
+
+        if (modifiedDir.sqrMagnitude < 0.001f)
+            modifiedDir = reflected;
+        
+        modifiedDir.Normalize();
+        
+        float dot = Vector2.Dot(modifiedDir, normal);
+
+        // if dot <= 0, we’re moving inward / along the surface → fix it
+        if (dot <= 0f)
+        {
+            // reflect across the normal so we are definitely going outward
+            modifiedDir = Vector2.Reflect(modifiedDir, normal);
+        }
+        
+        return modifiedDir * moveSpeed;
     }
 
     public static void ResetBallCount()
